@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Closet.Api": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://0.0.0.0:5005",
+      "environmentVariables": { 
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
