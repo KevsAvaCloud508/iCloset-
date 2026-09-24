@@ -2,10 +2,12 @@ using Closet.Api.Data;
 using Closet.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Azure.Storage.Blobs;
+using Azure.Storage.Sas;
+using Azure.Storage.Blobs.Models;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// SQLite: un solo archivo local, sin necesidad de instalar ningun motor de base de datos.
 builder.Services.AddDbContext<ClosetDbContext>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
@@ -27,8 +29,6 @@ await container.CreateIfNotExistsAsync();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Crea el archivo closet.db y la tabla si no existen, y mete un dato de prueba.
-// Esto es justo la tarea del dia 1: "que guarde y lea un dato de ejemplo".
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ClosetDbContext>();
@@ -40,10 +40,121 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 }
+// EndPoints
 
-// Endpoint minimo solo para comprobar que SQLite esta leyendo y guardando bien.
-// El endpoint real (GET /api/garments) se hace hasta el dia 2.
-app.MapGet("/api/test", async (ClosetDbContext db) =>
-    await db.Garments.ToListAsync());
+app.MapGet("/api/garments", async (ClosetDbContext db) =>
+{
+    var garments = await db.Garments.ToListAsync();
+
+    var result = garments.Select(garment =>
+    {
+        string? imageUrl = null;
+
+        if (!string.IsNullOrWhiteSpace(garment.FileName))
+        {
+            var blob = container.GetBlobClient(garment.FileName);
+
+            imageUrl = blob.GenerateSasUri(
+                BlobSasPermissions.Read,
+                DateTimeOffset.UtcNow.AddHours(1)
+            ).ToString();
+        }
+
+        return new
+        {
+            garment.Id,
+            garment.Name,
+            garment.BodyPart,
+            garment.FileName,
+            garment.CreatedAtUtc,
+            ImageUrl = imageUrl
+        };
+    });
+
+    return Results.Ok(result);
+});
+
+
+// POST: sube una foto a Blob y guarda la prenda en SQLite.
+app.MapPost("/api/garments", async (
+    [FromForm] string name,
+    [FromForm] BodyPart bodyPart,
+    IFormFile photo,
+    ClosetDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(name))
+        return Results.BadRequest("El nombre es obligatorio.");
+
+    if (photo.Length == 0 || photo.Length > 5 * 1024 * 1024)
+        return Results.BadRequest("La foto debe pesar entre 1 byte y 5 MB.");
+
+    var extension = photo.ContentType switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        _ => null
+    };
+
+    if (extension is null)
+        return Results.BadRequest("Solo se permiten imágenes JPG, PNG o WEBP.");
+
+    var fileName = $"{Guid.NewGuid()}{extension}";
+    var blob = container.GetBlobClient(fileName);
+
+    await blob.UploadAsync(
+        photo.OpenReadStream(),
+        new BlobUploadOptions
+        {
+            HttpHeaders = new BlobHttpHeaders
+            {
+                ContentType = photo.ContentType
+            }
+        });
+
+    var garment = new Garment
+    {
+        Name = name,
+        BodyPart = bodyPart,
+        FileName = fileName
+    };
+
+    try
+    {
+        db.Garments.Add(garment);
+        await db.SaveChangesAsync();
+    }
+    catch
+    {
+        await blob.DeleteIfExistsAsync();
+        throw;
+    }
+
+    return Results.Created($"/api/garments/{garment.Id}", garment);
+})
+.DisableAntiforgery();
+
+
+// DELETE: elimina la foto de Blob y la prenda de SQLite.
+app.MapDelete("/api/garments/{id:int}", async (
+    int id,
+    ClosetDbContext db) =>
+{
+    var garment = await db.Garments.FindAsync(id);
+
+    if (garment is null)
+        return Results.NotFound("No se encontró la prenda.");
+
+    if (!string.IsNullOrWhiteSpace(garment.FileName))
+    {
+        var blob = container.GetBlobClient(garment.FileName);
+        await blob.DeleteIfExistsAsync();
+    }
+
+    db.Garments.Remove(garment);
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+});
 
 app.Run();
