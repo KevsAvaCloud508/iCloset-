@@ -1,23 +1,39 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { colors } from './src/theme/theme';
-
-
+import ClosetCarousel from './src/components/ClosetCarousel';
+ 
+const Tab = createBottomTabNavigator();
+ 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Mi clóset</Text>
-      <Text style={styles.text}>¡Bienvenido!</Text>
-    </View>
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={{
+          tabBarActiveTintColor: colors.rail,
+          tabBarInactiveTintColor: colors.muted,
+          tabBarStyle: {
+            backgroundColor: colors.card,
+            borderTopColor: colors.line,
+            height: 60,
+          },
+          headerStyle: {
+            backgroundColor: colors.card,
+          },
+          headerTitleStyle: {
+            fontWeight: '700',
+            color: colors.ink,
+          },
+        }}
+      >
+        <Tab.Screen
+          name="Closet"
+          component={ClosetCarousel}
+          options={{ headerTitle: 'Mi Clóset' }}
+        />
+      </Tab.Navigator>
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.wall,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: { fontSize: 24, fontWeight: '700', color: colors.ink },
-});
