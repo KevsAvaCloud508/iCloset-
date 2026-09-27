@@ -1,12 +1,21 @@
-// Colores base de la app. Todavia no se usan en ninguna pantalla (eso es dia 2),
-// pero ya quedan definidos para que todos usen los mismos.
+/*
+  Paleta MONOCROMA (negro y blanco) de toda la app:
+  wall   → fondo general (blanco roto)
+  card   → tarjetas, input, barra inferior (blanco puro)
+  ink    → texto principal y botón "Tomar foto" (negro)
+  muted  → textos secundarios/hint (gris)
+  rail   → color de selección: borde de tarjeta elegida y botón
+           de parte del cuerpo activo (negro, antes era dorado)
+  line   → bordes y separadores (gris claro)
+  danger → reservado para acciones destructivas
+*/
 export const colors = {
-  wall: '#E8EDEF',
+  wall: '#F4F4F4',
   card: '#FFFFFF',
-  ink: '#16232B',
-  muted: '#6B7B84',
-  rail: '#B58B3C',
-  line: '#CBD5DA',
+  ink: '#111111',
+  muted: '#8A8A8A',
+  rail: '#111111',
+  line: '#E0E0E0',
   danger: '#B3402F',
 };
 

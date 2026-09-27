@@ -31,17 +31,22 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
 
 # .NET
 
 **/bin/
 **/obj/
-**/closet.db
-**/closet.db-shm
-**/closet.db-wal
 **/node_modules/
 **/.expo/
+
+# Bases de datos SQLite locales (cualquier variante: closet.db, closet 2.db, etc.)
+**/*.db
+**/*.db-shm
+**/*.db-wal
 
 
 # typescript
