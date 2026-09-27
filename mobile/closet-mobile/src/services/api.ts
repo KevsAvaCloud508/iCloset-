@@ -1,3 +1,21 @@
+/*
+  ============================================================
+  CLIENTE DE LA API (backend .NET + Azure Blob Storage)
+  ============================================================
+  POR QUÉ FUNCIONA LA SUBIDA DE FOTOS (fix importante):
+  Expo SDK 57 reemplaza el fetch global por uno propio
+  (WinterCG) que NO soporta archivos locales en FormData y lanza
+  "Unsupported FormDataPart implementation" /
+  "Cannot read property 'prototype' of undefined".
+
+  Solución: el .env de este proyecto define
+      EXPO_PUBLIC_USE_RN_FETCH=1
+  Con eso Expo deja instalado su fetch y usa el NATIVO de React
+  Native, que sí construye bien las partes { uri, name, type }.
+  Si el .env desaparece o se corre "expo start" sin --clear,
+  la subida de fotos vuelve a fallar.
+*/
+
 export type BodyPart = 'Head' | 'Torso' | 'Legs' | 'Feet';
 
 export type Garment = {
@@ -9,6 +27,12 @@ export type Garment = {
     imageUrl: string | null;
 };
 
+/*
+  Todas las funciones aceptan la URL del backend como parámetro
+  (por defecto la IP local de la PC). withApiUrl devuelve un
+  helper con la URL fija, por si se prefiere configurar una
+  sola vez (App.tsx hoy usa las funciones directas).
+*/
 export function withApiUrl(url: string) {
   return {
     getGarments: () => getGarments(url),
@@ -17,6 +41,7 @@ export function withApiUrl(url: string) {
   };
 }
 
+/* GET /api/garments — devuelve todas las prendas con su URL de foto en Azure. */
 export async function getGarments(url: string = 'http://192.168.0.98:5005'): Promise<Garment[]> {
     const response = await fetch(`${url}/api/garments`);
 
@@ -27,6 +52,13 @@ export async function getGarments(url: string = 'http://192.168.0.98:5005'): Pro
     return response.json();
 }
 
+/*
+  Convierte el asset que viene del ImagePicker/ImageManipulator
+  al formato que React Native espera para ARCHIVOS en FormData:
+  { uri: ruta local de la foto, name: nombre de archivo,
+    type: tipo MIME }. El backend recibe estos tres campos como
+  el IFormFile "photo" y con eso guarda el blob en Azure.
+*/
 function buildPhotoAsset(
     asset: { uri: string; fileName?: string | null; mimeType?: string | null }
 ) {
@@ -43,6 +75,14 @@ function buildPhotoAsset(
     };
 }
 
+/*
+  POST /api/garments — multipart/form-data con:
+    name     → nombre de la prenda
+    bodyPart → parte del cuerpo ('Head' | 'Torso' | 'Legs' | 'Feet')
+    photo    → archivo { uri, name, type } (ver buildPhotoAsset)
+  Devuelve 201 del backend; la foto ya quedó en Azure y la BD
+  guarda su URL pública.
+*/
 export async function uploadGarment(
     name: string,
     bodyPart: BodyPart,
@@ -65,6 +105,7 @@ export async function uploadGarment(
     }
 }
 
+/* DELETE /api/garments/{id} — borra el registro y su foto en Azure. */
 export async function deleteGarment(id: number, url: string = 'http://192.168.0.98:5005'): Promise<void> {
     const response = await fetch(`${url}/api/garments/${id}`, {
         method: 'DELETE',

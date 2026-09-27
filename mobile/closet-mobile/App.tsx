@@ -32,6 +32,19 @@ import { useFonts, SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-
   
 
 
+/*
+  ============================================================
+  CONFIGURACIÓN GLOBAL
+  ============================================================
+  - API_URL: IP local de la PC donde corre el backend .NET
+    (dotnet run --urls=http://0.0.0.0:5005). El celular la
+    alcanza porque ambos están en la misma red Wi-Fi.
+  - BODY_PARTS: partes del cuerpo que acepta el backend (enum).
+    El orden importa: el backend a veces devuelve la parte como
+    número (0=Head, 1=Torso, 2=Legs, 3=Feet).
+  - EMPTY_SELECTION: prenda seleccionada por parte del cuerpo
+    (null = todavía no se eligió ninguna).
+*/
 const API_URL = 'http://192.168.0.98:5005';
 
 const BODY_PARTS: { value: BodyPart; label: string }[] = [
@@ -48,10 +61,23 @@ const EMPTY_SELECTION: Record<BodyPart, number | null> = {
   Feet: null,
 };
 
+/*
+  ============================================================
+  PANTALLA PRINCIPAL
+  ============================================================
+  - useSafeAreaInsets: dice cuánto ocupan el notch (arriba) y
+    la barra de gestos (abajo) en CADA teléfono. Con eso el
+    contenido nunca queda tapado, sin importar el modelo.
+  - Tamaños proporcionales: la tarjeta mide 42% del ancho
+    (máx. 170px) y la foto sigue la misma proporción, así el
+    diseño escala bien en pantallas grandes y chicas.
+*/
 function ClosetApp() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  // Tarjetas proporcionales al ancho de la pantalla
+  // cardStep = salto exacto entre inicios de tarjeta: se usa
+  // para el efecto "snap" del carrusel y para saber qué
+  // tarjeta quedó centrada al terminar el scroll.
   const cardWidth = Math.min(170, width * 0.42);
   const cardStep = cardWidth + 12;
   const imageHeight = Math.round(cardWidth * 0.95);
@@ -63,11 +89,27 @@ function ClosetApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  /*
+    FUENTE: Space Mono (monoespaciada, estilo moderno que casa
+    con el tema blanco/negro). Se carga en runtime con expo-font
+    y los estilos la referencian como 'SpaceMono-Regular' y
+    'SpaceMono-Bold'.
+  */
   const [fontsLoaded] = useFonts({
     'SpaceMono-Regular': SpaceMono_400Regular,
     'SpaceMono-Bold': SpaceMono_700Bold,
   });
 
+  /*
+    CARGA DE PRENDAS (GET /api/garments)
+    1. Pide la lista completa al backend.
+    2. Normaliza bodyPart: si llega como número (enum 0..3) lo
+       convierte a 'Head'/'Torso'/'Legs'/'Feet' para que la UI
+       siempre trabaje con el nombre.
+    3. Auto-selección: por cada carrusel, si la prenda que
+       estaba seleccionada ya no existe (ej. fue borrada),
+       selecciona la primera disponible o deja vacío.
+  */
   const loadGarments = useCallback(async () => {
     try {
       const data = await getGarments(API_URL);
@@ -110,6 +152,19 @@ function ClosetApp() {
     void loadGarments();
   }, [loadGarments]);
 
+  /*
+    FLUJO "TOMAR FOTO Y AGREGAR" (POST /api/garments)
+    1. Valida que haya nombre para la prenda.
+    2. Pide permiso de cámara y abre la cámara (recorte 4:5).
+    3. ImageManipulator achica la foto a 1200px y la comprime a
+      JPEG 80%: pesa menos y la subida es más rápida.
+    4. uploadGarment la envía como multipart/form-data.
+
+    NOTA CLAVE: esto depende del .env (EXPO_PUBLIC_USE_RN_FETCH=1).
+    Sin esa variable, Expo usa su fetch propio que NO soporta
+    archivos locales en FormData y falla con
+    "Unsupported FormDataPart implementation". Ver api.ts.
+  */
   async function takePhotoAndUpload() {
     const trimmedName = name.trim();
 
@@ -167,6 +222,11 @@ function ClosetApp() {
     }
   }
 
+  /*
+    ELIMINAR PRENDA: se activa con presión larga sobre una
+    tarjeta. Pide confirmación y borra el registro y su foto
+    en Azure (DELETE /api/garments/{id}).
+  */
   function confirmDelete(garment: Garment) {
     Alert.alert('Eliminar prenda', `¿Quieres eliminar "${garment.name}" y su foto?`, [
       { text: 'Cancelar', style: 'cancel' },
@@ -188,6 +248,19 @@ function ClosetApp() {
     ]);
   }
 
+  /*
+    CARRUSEL POR PARTE DEL CUERPO
+    - snapToInterval + decelerationRate "fast": al soltar, la
+      tira se acomoda tarjeta por tarjeta (efecto snap).
+    - onMomentumScrollEnd: cuando el scroll termina, calcula
+      qué tarjeta quedó centrada (posición / cardStep) y la
+      marca como la seleccionada de esa parte del cuerpo.
+    - onPress: selecciona directo. onLongPress: borrar.
+    - paddingHorizontal dinámico: agrega medio ancho de tarjeta
+      a los costados para que la primera y la última también
+      puedan quedar centradas.
+    - Las tarjetas muestran SOLO la foto, sin nombre encima.
+  */
   function renderCarousel(part: { value: BodyPart; label: string }) {
     const items = garments.filter((garment) => garment.bodyPart === part.value);
 
@@ -261,11 +334,6 @@ function ClosetApp() {
     );
   }
 
-  const outfit = BODY_PARTS.map((part) => ({
-    ...part,
-    garment: garments.find((item) => item.id === selectedIds[part.value]),
-  }));
-
   return (
     <View style={[styles.container, { paddingTop: insets.top + 6 }]}>
       <Text style={styles.title}>iCloset</Text>
@@ -313,6 +381,9 @@ function ClosetApp() {
         )}
       </ScrollView>
 
+      {/* BARRA INFERIOR: título centrado; paddingBottom usa el
+          inset seguro para apoyarse justo sobre la barra de
+          gestos del teléfono, sin flotar ni quedar tapada. */}
       <View style={[styles.outfitBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Text style={styles.outfitTitle}>iCloset</Text>
       </View>
@@ -320,6 +391,10 @@ function ClosetApp() {
   );
 }
 
+/*
+  SafeAreaProvider habilita useSafeAreaInsets dentro de la app.
+  Es el punto de entrada real que registra Expo (index.ts).
+*/
 export default function App() {
   return (
     <SafeAreaProvider>
