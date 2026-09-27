@@ -1,12 +1,11 @@
-// Colores base de la app. Todavia no se usan en ninguna pantalla (eso es dia 2),
-// pero ya quedan definidos para que todos usen los mismos.
+// Colores base de la app — tema monocromo (negro y blanco).
 export const colors = {
-  wall: '#E8EDEF',
+  wall: '#F4F4F4',
   card: '#FFFFFF',
-  ink: '#16232B',
-  muted: '#6B7B84',
-  rail: '#B58B3C',
-  line: '#CBD5DA',
+  ink: '#111111',
+  muted: '#8A8A8A',
+  rail: '#111111',
+  line: '#E0E0E0',
   danger: '#B3402F',
 };
 
