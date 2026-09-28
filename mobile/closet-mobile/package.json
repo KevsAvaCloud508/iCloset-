@@ -30,5 +30,8 @@
     "test": "jest",
     "test:watch": "jest --watch"
   },
+  "engines": {
+    "node": ">=20.19.4"
+  },
   "private": true
 }
