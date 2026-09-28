@@ -342,6 +342,19 @@ function ClosetApp() {
     );
   }
 
+  /*
+    BARRA "TU OUTFIT"
+    Arma los 4 slots (uno por zona) con la prenda que está
+    seleccionada en cada carrusel. `outfitCount` alimenta el
+    contador n/4 y el ✕ de cada slot deselecciona esa zona.
+  */
+  const outfitSlots = BODY_PARTS.map((part) => ({
+    part,
+    garment:
+      garments.find((garment) => garment.id === selectedIds[part.value]) ?? null,
+  }));
+  const outfitCount = outfitSlots.filter((slot) => slot.garment !== null).length;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 6 }]}>
       <Text style={styles.title}>iCloset</Text>
@@ -389,11 +402,55 @@ function ClosetApp() {
         )}
       </ScrollView>
 
-      {/* BARRA INFERIOR: título centrado; paddingBottom usa el
-          inset seguro para apoyarse justo sobre la barra de
-          gestos del teléfono, sin flotar ni quedar tapada. */}
+      {/* BARRA "TU OUTFIT": muestra la prenda elegida en cada zona,
+          el contador n/4 y permite quitar una selección. paddingBottom
+          usa el inset seguro para apoyarse sobre la barra de gestos. */}
       <View style={[styles.outfitBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <Text style={styles.outfitTitle}>iCloset</Text>
+        <View style={styles.outfitHeader}>
+          <Text style={styles.outfitTitle}>Tu outfit</Text>
+          <Text style={styles.outfitCount}>{outfitCount}/4</Text>
+        </View>
+
+        <View style={styles.outfitGrid}>
+          {outfitSlots.map(({ part, garment }) => (
+            <View key={part.value} style={styles.outfitSlot}>
+              {garment ? (
+                garment.imageUrl ? (
+                  <Image
+                    source={{ uri: garment.imageUrl }}
+                    style={styles.outfitImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.outfitImage, styles.outfitPlaceholder]}>
+                    <Text style={styles.outfitPlaceholderText}>Sin foto</Text>
+                  </View>
+                )
+              ) : (
+                <View style={[styles.outfitImage, styles.outfitPlaceholder]}>
+                  <Text style={styles.outfitPlaceholderText}>Sin prenda</Text>
+                </View>
+              )}
+
+              {garment && (
+                <TouchableOpacity
+                  onPress={() =>
+                    setSelectedIds((previous) => ({
+                      ...previous,
+                      [part.value]: null,
+                    }))
+                  }
+                  style={styles.outfitRemove}
+                  accessibilityLabel={`Quitar prenda de ${part.label}`}
+                >
+                  <Text style={styles.outfitRemoveText}>✕</Text>
+                </TouchableOpacity>
+              )}
+
+              <Text style={styles.outfitSlotLabel}>{part.label}</Text>
+            </View>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -544,20 +601,78 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   outfitBar: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.outfitBarBg,
     borderTopColor: colors.line,
     borderTopWidth: 1,
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  outfitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  outfitTitle: {
+    color: colors.outfitBarText,
+    fontFamily: 'SpaceMono-Bold',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  outfitCount: {
+    color: colors.outfitBarTextMuted,
+    fontFamily: 'SpaceMono-Regular',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  outfitGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  outfitSlot: {
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  outfitImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 10,
+    backgroundColor: colors.wall,
+  },
+  outfitPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.line,
+  },
+  outfitPlaceholderText: {
+    color: colors.outfitBarTextMuted,
+    fontFamily: 'SpaceMono-Regular',
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  outfitRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  outfitTitle: {
-    color: colors.ink,
-    fontFamily: 'SpaceMono-Bold',
-    fontSize: 16,
+  outfitRemoveText: {
+    color: colors.card,
+    fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 2,
+  },
+  outfitSlotLabel: {
+    color: colors.outfitBarTextMuted,
+    fontFamily: 'SpaceMono-Regular',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 4,
     textAlign: 'center',
   },
 });
