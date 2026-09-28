@@ -41,7 +41,8 @@ describe('api de prendas', () => {
       fetchMock.mockResolvedValue(mockResponse(true, [garment]));
 
       await expect(getGarments(API)).resolves.toEqual([garment]);
-      expect(fetchMock).toHaveBeenCalledWith(`${API}/api/garments`);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe(`${API}/api/garments`);
     });
 
     it('propaga el mensaje de error del backend', async () => {
@@ -54,6 +55,26 @@ describe('api de prendas', () => {
       fetchMock.mockResolvedValue(mockResponse(false, '', 503));
 
       await expect(getGarments(API)).rejects.toThrow('Error al cargar prendas: 503');
+    });
+
+    it('aborta y avisa si el backend no responde (timeout)', async () => {
+      jest.useFakeTimers();
+      fetchMock.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+          })
+      );
+
+      try {
+        const request = getGarments(API);
+        const assertion = expect(request).rejects.toThrow(/tardó más de 15 s/);
+
+        await jest.advanceTimersByTimeAsync(15000);
+        await assertion;
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 
@@ -141,7 +162,8 @@ describe('api de prendas', () => {
 
       await client.getGarments();
 
-      expect(fetchMock).toHaveBeenCalledWith(`${API}/api/garments`);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe(`${API}/api/garments`);
     });
   });
 });

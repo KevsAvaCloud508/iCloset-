@@ -19,6 +19,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { colors } from './src/theme/theme';
 import {
+  API_URL,
   deleteGarment,
   getGarments,
   uploadGarment,
@@ -38,16 +39,17 @@ import { useFonts, SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-
   ============================================================
   CONFIGURACIÓN GLOBAL
   ============================================================
-  - API_URL: IP local de la PC donde corre el backend .NET
-    (dotnet run --urls=http://0.0.0.0:5005). El celular la
-    alcanza porque ambos están en la misma red Wi-Fi.
+  - API_URL: URL del backend .NET. Se define en `src/services/api.ts`
+    y se puede sobreescribir con la variable de entorno
+    EXPO_PUBLIC_API_URL (por ejemplo en `.env`). Por defecto apunta a
+    la IP local de la PC donde corre el backend; el celular la alcanza
+    porque ambos están en la misma red Wi-Fi.
   - BODY_PARTS: partes del cuerpo que acepta el backend (enum).
     El orden importa: el backend a veces devuelve la parte como
     número (0=Head, 1=Torso, 2=Legs, 3=Feet).
   - EMPTY_SELECTION: prenda seleccionada por parte del cuerpo
     (null = todavía no se eligió ninguna).
 */
-const API_URL = 'http://192.168.0.98:5005';
 
 const BODY_PARTS: { value: BodyPart; label: string }[] = [
   { value: 'Head', label: 'Cabeza' },

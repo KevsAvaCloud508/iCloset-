@@ -47,7 +47,38 @@ Evidencia (código de las dependencias instaladas):
    del backend, así se ve el mensaje real (por ejemplo
    `La foto debe pesar entre 1 byte y 5 MB.`) en lugar de solo el status.
 
-## 2. Problemas secundarios detectados
+## 2. IP del backend configurable y timeout
+
+**Síntoma relacionado:** la app se queda "Guardando…" 30 s o más. No es que
+tarde en comprimir/subir: es que el celular intenta llegar a una IP que ya no
+existe y espera el timeout TCP del sistema (30-75 s).
+
+**Cambios:**
+
+- `API_URL` ahora vive en `src/services/api.ts` y se puede sobreescribir con
+  `EXPO_PUBLIC_API_URL` (badge en `.env`):
+  ```bash
+  # obtener la IP actual de la PC (macOS)
+  ipconfig getifaddr en0
+  # en .env
+  EXPO_PUBLIC_API_URL=http://TU_IP:5005
+  ```
+  Si no se define, usa el default `http://192.168.0.98:5005`. Así ya no hay
+  que editar código cuando cambia la red.
+- Todas las peticiones usan `fetchWithTimeout` (15 s, `AbortController`). Si
+  el backend no responde, falla rápido con un mensaje claro en vez de dejar
+  la app colgada.
+
+**Cómo diagnosticar un "se queda guardando":**
+
+1. Compara la IP del celular/backend: `ipconfig getifaddr en0` contra
+   `EXPO_PUBLIC_API_URL`.
+2. Abre en el navegador del celular `http://TU_IP:5005/swagger`. Si no abre,
+   es red (IP equivocada, backend apagado, u otra Wi-Fi/firewall), no código.
+3. Si el request sí llega al backend y se queda, el cuello de botella es
+   Azure Blob (credencial/red).
+
+## 3. Problemas secundarios detectados
 
 | Problema | Estado |
 |---|---|
@@ -55,8 +86,10 @@ Evidencia (código de las dependencias instaladas):
 | `app.json` no lista el plugin de `expo-image-picker` | Pendiente; en Expo Go no afecta, en build nativo puede faltar permiso |
 | `ImageManipulator.manipulateAsync` está deprecado en SDK 57 | Funciona; pendiente migrar a `ImageManipulator.manipulate`/`useImageManipulator` |
 | Falta `.env` documentado | Corregido con `.env.example` |
+| IP del backend hardcodeada | Corregido con `EXPO_PUBLIC_API_URL` |
+| Peticiones sin timeout (app colgada) | Corregido con `fetchWithTimeout` (15 s) |
 
-## 3. Tests
+## 4. Tests
 
 ### Setup
 
@@ -78,7 +111,7 @@ Evidencia (código de las dependencias instaladas):
 
 | Archivo | Qué prueba |
 |---|---|
-| `src/services/__tests__/api.test.ts` | GET/POST/DELETE, URL y método, forma `{ uri, name, type }` del `photo` (regresión del bug de FormData), mensajes de error del backend, `withApiUrl` |
+| `src/services/__tests__/api.test.ts` | GET/POST/DELETE, URL y método, forma `{ uri, name, type }` del `photo` (regresión del bug de FormData), mensajes de error del backend, timeout (`AbortController`), `withApiUrl` |
 | `src/utils/__tests__/outfit.test.ts` | `buildOutfitSlots` (prenda por zona, id inexistente) y `countOutfitSlots` (n/4) |
 | `src/components/__tests__/OutfitBar.test.tsx` | Título, contador, "Sin prenda"/"Sin foto", ✕ solo con prenda, callback `onRemove` |
 | `__tests__/photo-flow.test.tsx` | Flujo completo con mocks de `expo-image-picker`/`expo-image-manipulator`: permiso denegado, cancelar, éxito (comprime, sube y recarga) y fallo con mensaje del backend |
@@ -87,12 +120,12 @@ Evidencia (código de las dependencias instaladas):
 
 ```text
 Test Suites: 4 passed, 4 total
-Tests:       23 passed, 23 total
+Tests:       24 passed, 24 total
 ```
 
 Verificación de tipos: `npx tsc --noEmit` sin errores.
 
-## 4. Refactor para testear
+## 5. Refactor para testear
 
 Para poder testear sin depender del componente gigante:
 
@@ -104,7 +137,7 @@ Para poder testear sin depender del componente gigante:
   (`garment-card-*`, `garment-check-*`) y en el botón de foto
   (`add-photo-button`).
 
-## 5. Pendientes
+## 6. Pendientes
 
 - Migrar `manipulateAsync` a la API nueva de `expo-image-manipulator`.
 - Agregar el plugin de `expo-image-picker` a `app.json` para builds nativos.

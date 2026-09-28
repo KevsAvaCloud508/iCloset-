@@ -28,6 +28,7 @@ jest.mock('expo-image-manipulator', () => ({
 }));
 
 jest.mock('../src/services/api', () => ({
+  API_URL: 'http://192.168.0.98:5005',
   getGarments: jest.fn(),
   uploadGarment: jest.fn(),
   deleteGarment: jest.fn(),
