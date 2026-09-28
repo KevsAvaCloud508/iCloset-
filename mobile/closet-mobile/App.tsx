@@ -325,6 +325,14 @@ function ClosetApp() {
                       <Text style={styles.muted}>Sin foto</Text>
                     </View>
                   )}
+
+                  {/* Palomita: refuerza visualmente cuál es la prenda
+                      seleccionada de esta zona del cuerpo. */}
+                  {selected && (
+                    <View style={styles.checkBadge}>
+                      <Text style={styles.checkMark}>✓</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             }}
@@ -493,6 +501,23 @@ const styles = StyleSheet.create({
   selectedCard: {
     borderColor: colors.rail,
     borderWidth: 3,
+  },
+  checkBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.rail,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkMark: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'SpaceMono-Bold',
   },
   garmentImage: {
     width: '100%',
