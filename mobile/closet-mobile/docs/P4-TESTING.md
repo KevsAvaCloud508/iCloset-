@@ -65,7 +65,7 @@ existe y espera el timeout TCP del sistema (30-75 s).
   ```
   Si no se define, usa el default `http://192.168.0.98:5005`. Así ya no hay
   que editar código cuando cambia la red.
-- Todas las peticiones usan `fetchWithTimeout` (15 s, `AbortController`). Si
+- Todas las peticiones usan `fetchWithTimeout` (30 s, `AbortController`). Si
   el backend no responde, falla rápido con un mensaje claro en vez de dejar
   la app colgada.
 
@@ -87,7 +87,7 @@ existe y espera el timeout TCP del sistema (30-75 s).
 | `ImageManipulator.manipulateAsync` está deprecado en SDK 57 | Funciona; pendiente migrar a `ImageManipulator.manipulate`/`useImageManipulator` |
 | Falta `.env` documentado | Corregido con `.env.example` |
 | IP del backend hardcodeada | Corregido con `EXPO_PUBLIC_API_URL` |
-| Peticiones sin timeout (app colgada) | Corregido con `fetchWithTimeout` (15 s) |
+| Peticiones sin timeout (app colgada) | Corregido con `fetchWithTimeout` (30 s) |
 
 ## 4. Tests
 
@@ -111,16 +111,16 @@ existe y espera el timeout TCP del sistema (30-75 s).
 
 | Archivo | Qué prueba |
 |---|---|
-| `src/services/__tests__/api.test.ts` | GET/POST/DELETE, URL y método, forma `{ uri, name, type }` del `photo` (regresión del bug de FormData), mensajes de error del backend, timeout (`AbortController`), `withApiUrl` |
-| `src/utils/__tests__/outfit.test.ts` | `buildOutfitSlots` (prenda por zona, id inexistente) y `countOutfitSlots` (n/4) |
+| `src/services/__tests__/api.test.ts` | GET/POST/DELETE, URL y método, forma `{ uri, name, type }` del `photo` (regresión del bug de FormData), mensajes de error del backend, timeout 30 s (`AbortController`), `withApiUrl` |
+| `src/utils/__tests__/outfit.test.ts` | `buildOutfitSlots` (prenda por zona, id inexistente), `countOutfitSlots` (n/4) y `reconcileSelectedIds` (zona descartada, prenda borrada, mantener selección) |
 | `src/components/__tests__/OutfitBar.test.tsx` | Título, contador, "Sin prenda"/"Sin foto", ✕ solo con prenda, callback `onRemove` |
-| `__tests__/photo-flow.test.tsx` | Flujo completo con mocks de `expo-image-picker`/`expo-image-manipulator`: permiso denegado, cancelar, éxito (comprime, sube y recarga) y fallo con mensaje del backend |
+| `__tests__/photo-flow.test.tsx` | Gate de fuentes, permiso denegado, cancelar, doble toque (solo abre la cámara una vez), éxito (comprime con la API nueva, sube y recarga), fallo con mensaje del backend, recarga fallida con un solo alert, etiqueta accesible de las tarjetas |
 
 ### Resultado
 
 ```text
 Test Suites: 4 passed, 4 total
-Tests:       24 passed, 24 total
+Tests:       33 passed, 33 total
 ```
 
 Verificación de tipos: `npx tsc --noEmit` sin errores.
@@ -129,7 +129,8 @@ Verificación de tipos: `npx tsc --noEmit` sin errores.
 
 Para poder testear sin depender del componente gigante:
 
-- `src/utils/outfit.ts`: `buildOutfitSlots`, `countOutfitSlots` (lógica pura).
+- `src/utils/outfit.ts`: `buildOutfitSlots`, `countOutfitSlots`,
+  `reconcileSelectedIds` (lógica pura).
 - `src/components/OutfitBar.tsx`: barra "Tu outfit" presentacional con
   `testID`s (`outfit-bar`, `outfit-count`, `outfit-slot-*`,
   `outfit-remove-*`).
@@ -139,7 +140,7 @@ Para poder testear sin depender del componente gigante:
 
 ## 6. Pendientes
 
-- Migrar `manipulateAsync` a la API nueva de `expo-image-manipulator`.
-- Agregar el plugin de `expo-image-picker` a `app.json` para builds nativos.
 - Considerar un test que corra en dispositivo/CI con el `.env` real (los
   tests actuales mockean `fetch`, por eso no cubren el bug de Expo fetch).
+- Verificación manual en celular de lo que no es automatizable (guardado real,
+  jitter visual, plugin en build nativo). Ver `P4-REVISION.md`.

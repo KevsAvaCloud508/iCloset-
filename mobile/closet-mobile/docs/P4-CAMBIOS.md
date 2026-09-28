@@ -71,10 +71,10 @@ carrusel. En esta rama se completan los que faltaban:
    agregaron los tokens que faltaban (`outfitBar*`).
 3. **Datos reales:** la barra se alimenta de `garments` + `selectedIds`, que
    vienen de `GET /api/garments`. No se usa mock ni datos demo.
-4. **Descartar selección:** el `✕` limpia la zona en memoria. La
-   auto-selección de `loadGarments` puede volver a llenar esa zona en la
-   siguiente recarga. Si se requiere que el descarte persista entre recargas,
-   hacerlo en un cambio aparte.
+4. **Descartar selección:** el `✕` limpia la zona y la deja vacía; las
+   recargas ya **no** la vuelven a llenar (`clearedParts` +
+   `reconcileSelectedIds`). La zona se rellena solo si el usuario elige una
+   prenda de nuevo.
 
 ## Criterios de aceptación (PLAN-P4.md)
 
@@ -88,7 +88,7 @@ carrusel. En esta rama se completan los que faltaban:
 ```bash
 cd mobile/closet-mobile
 npm install
-npx expo start
+npm start -- --clear   # los scripts ya activan EXPO_PUBLIC_USE_RN_FETCH
 ```
 
 Con el backend corriendo y el celular en la misma red Wi-Fi:
@@ -97,11 +97,18 @@ Con el backend corriendo y el celular en la misma red Wi-Fi:
    "Tu outfit" actualiza esa zona.
 2. Deslizar un carrusel: la prenda centrada queda seleccionada, con snap
    exacto (sin desfase).
-3. Tocar el `✕` de un slot: la zona queda "Sin prenda" y el contador baja.
+3. Tocar el `✕` de un slot: la zona queda "Sin prenda", el contador baja y
+   no se rellena al recargar.
 4. Cambiar un color en `src/theme/theme.ts`: se refleja al recargar la app.
+
+> Si el backend no responde, revisa `EXPO_PUBLIC_API_URL` en `.env` (tu IP
+> local) y que ambos estén en la misma Wi-Fi. Ver `P4-TESTING.md` para el
+> diagnóstico completo.
 
 ## Pendiente / fuera de alcance
 
 - Cámara propia con `expo-camera` (preview usar/repetir, flash, voltear).
-- Persistir el descarte de una zona entre recargas.
 - Guardar outfits como entidad en el backend.
+
+Los hallazgos de la revisión quedaron resueltos y documentados en
+`P4-REVISION.md` (con estado y evidencia de cada punto).
