@@ -31,14 +31,15 @@ export type Garment = {
       EXPO_PUBLIC_API_URL=http://10.0.0.5:5005
   Así no hay que editar el código cada vez que cambia la IP de la PC.
 */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.98:5005';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.98:5005';
 
 /*
   Tiempo máximo por petición. Si el backend no responde (IP equivocada,
   apagado o en otra red) abortamos rápido con un mensaje claro, en vez
   de esperar el timeout TCP del sistema (30-75 s) con la app "colgada".
+  30 s da margen a subidas lentas (Wi-Fi + Azure).
 */
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 30000;
 
 /*
   fetch con timeout usando AbortController. Si se cumple el límite,

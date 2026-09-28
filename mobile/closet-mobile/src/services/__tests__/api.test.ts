@@ -68,9 +68,9 @@ describe('api de prendas', () => {
 
       try {
         const request = getGarments(API);
-        const assertion = expect(request).rejects.toThrow(/tardó más de 15 s/);
+        const assertion = expect(request).rejects.toThrow(/tardó más de 30 s/);
 
-        await jest.advanceTimersByTimeAsync(15000);
+        await jest.advanceTimersByTimeAsync(30000);
         await assertion;
       } finally {
         jest.useRealTimers();
