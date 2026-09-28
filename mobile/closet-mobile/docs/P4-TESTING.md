@@ -26,17 +26,23 @@ Evidencia (código de las dependencias instaladas):
 
 **Fix aplicado:**
 
-1. Nuevo `mobile/closet-mobile/.env.example` con
-   `EXPO_PUBLIC_USE_RN_FETCH=1` (el `.gitignore` ya exceptúa
-   `!.env.example`).
-2. Instrucciones para copiarlo:
+1. Los scripts de npm fuerzan la variable con `cross-env`, así no depende
+   de que cada quien cree un `.env`:
+   ```json
+   "start":   "cross-env EXPO_PUBLIC_USE_RN_FETCH=1 expo start",
+   "android": "cross-env EXPO_PUBLIC_USE_RN_FETCH=1 expo start --android",
+   "ios":     "cross-env EXPO_PUBLIC_USE_RN_FETCH=1 expo start --ios"
+   ```
+   Con esto basta `npm start` (o `npm run ios` / `npm run android`).
+2. `mobile/closet-mobile/.env.example` documenta la variable para quien
+   arranque con `npx expo start` directo (fuera de npm):
    ```bash
    cd mobile/closet-mobile
    cp .env.example .env
    npx expo start --clear
    ```
-   El `--clear` es obligatorio: la variable se inlinea al compilar, si el
-   bundler tiene caché vieja no la toma.
+   El `--clear` es importante la primera vez: la variable se inlinea al
+   compilar y con caché vieja de Metro no se toma.
 3. `src/services/api.ts`: los errores ahora leen el cuerpo de la respuesta
    del backend, así se ve el mensaje real (por ejemplo
    `La foto debe pesar entre 1 byte y 5 MB.`) en lugar de solo el status.
