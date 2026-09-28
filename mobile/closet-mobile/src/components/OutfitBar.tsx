@@ -54,6 +54,7 @@ export default function OutfitBar({ slots, count, bottomInset, onRemove }: Outfi
                 onPress={() => onRemove(part.value)}
                 style={styles.remove}
                 testID={`outfit-remove-${part.value}`}
+                accessibilityRole="button"
                 accessibilityLabel={`Quitar prenda de ${part.label}`}
               >
                 <Text style={styles.removeText}>✕</Text>

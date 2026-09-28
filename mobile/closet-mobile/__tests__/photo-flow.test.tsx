@@ -1,14 +1,20 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import App from '../App';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { getGarments, uploadGarment } from '../src/services/api';
+import { useFonts } from '@expo-google-fonts/space-mono';
+import { getGarments, uploadGarment, type Garment } from '../src/services/api';
+
+const mockResize = jest.fn();
+const mockRenderAsync = jest.fn();
+const mockSaveAsync = jest.fn();
+const mockManipulate = jest.fn();
+const mockContext = { resize: mockResize, renderAsync: mockRenderAsync };
 
 jest.mock('@expo-google-fonts/space-mono', () => ({
-  useFonts: () => [true],
+  useFonts: jest.fn(),
   SpaceMono_400Regular: 1,
   SpaceMono_700Bold: 2,
 }));
@@ -23,7 +29,9 @@ jest.mock('expo-image-picker', () => ({
 }));
 
 jest.mock('expo-image-manipulator', () => ({
-  manipulateAsync: jest.fn(),
+  ImageManipulator: {
+    manipulate: (...args: unknown[]) => mockManipulate(...args),
+  },
   SaveFormat: { JPEG: 'jpeg' },
 }));
 
@@ -35,7 +43,7 @@ jest.mock('../src/services/api', () => ({
 }));
 
 const mockedPicker = ImagePicker as jest.Mocked<typeof ImagePicker>;
-const mockedManipulator = ImageManipulator as jest.Mocked<typeof ImageManipulator>;
+const mockedUseFonts = useFonts as jest.MockedFunction<typeof useFonts>;
 const mockedGetGarments = getGarments as jest.MockedFunction<typeof getGarments>;
 const mockedUploadGarment = uploadGarment as jest.MockedFunction<typeof uploadGarment>;
 
@@ -67,7 +75,16 @@ const compressedPhoto = {
   uri: 'file:///tmp/prenda-min.jpg',
   width: 1200,
   height: 1500,
-} as Awaited<ReturnType<typeof ImageManipulator.manipulateAsync>>;
+};
+
+const torsoGarment: Garment = {
+  id: 10,
+  name: 'Playera',
+  bodyPart: 'Torso',
+  fileName: '10.jpg',
+  createdAtUtc: '2026-09-28T00:00:00Z',
+  imageUrl: null,
+};
 
 async function fillNameAndPress() {
   await fireEvent.changeText(
@@ -83,8 +100,35 @@ describe('flujo de tomar foto y agregar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     alertSpy = jest.spyOn(Alert, 'alert');
+
+    mockedUseFonts.mockReset();
+    mockedUseFonts.mockReturnValue([true, null]);
+
+    mockedGetGarments.mockReset();
     mockedGetGarments.mockResolvedValue([]);
+
+    mockedUploadGarment.mockReset();
     mockedUploadGarment.mockResolvedValue(undefined);
+
+    mockedPicker.requestCameraPermissionsAsync.mockReset();
+    mockedPicker.launchCameraAsync.mockReset();
+
+    mockManipulate.mockReset();
+    mockManipulate.mockReturnValue(mockContext);
+    mockResize.mockReset();
+    mockResize.mockReturnValue(mockContext);
+    mockRenderAsync.mockReset();
+    mockRenderAsync.mockResolvedValue({ saveAsync: mockSaveAsync });
+    mockSaveAsync.mockReset();
+    mockSaveAsync.mockResolvedValue(compressedPhoto);
+  });
+
+  it('no renderiza la app hasta que cargan las fuentes', async () => {
+    mockedUseFonts.mockReturnValue([false, null]);
+
+    await render(<App />);
+
+    expect(screen.queryByText('Tu outfit')).toBeNull();
   });
 
   it('pide permiso y no abre la cámara si está denegado', async () => {
@@ -111,25 +155,54 @@ describe('flujo de tomar foto y agregar', () => {
     await fillNameAndPress();
 
     await waitFor(() => expect(mockedPicker.launchCameraAsync).toHaveBeenCalled());
-    expect(mockedManipulator.manipulateAsync).not.toHaveBeenCalled();
+    expect(mockManipulate).not.toHaveBeenCalled();
     expect(mockedUploadGarment).not.toHaveBeenCalled();
+  });
+
+  it('ignora un segundo toque mientras la cámara está abierta', async () => {
+    mockedPicker.requestCameraPermissionsAsync.mockResolvedValue(grantedPermission);
+
+    let resolveCamera: (value: ImagePicker.ImagePickerResult) => void = () => {};
+    mockedPicker.launchCameraAsync.mockImplementation(
+      () =>
+        new Promise<ImagePicker.ImagePickerResult>((resolve) => {
+          resolveCamera = resolve;
+        })
+    );
+
+    await render(<App />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('Nombre de la prenda'),
+      'Playera'
+    );
+
+    // No se espera el primer press: fireEvent propaga la promesa del handler
+    // y esta queda pendiente hasta que "cerremos" la cámara.
+    const firstPress = fireEvent.press(screen.getByTestId('add-photo-button'));
+    await waitFor(() => expect(mockedPicker.launchCameraAsync).toHaveBeenCalledTimes(1));
+
+    await fireEvent.press(screen.getByTestId('add-photo-button'));
+    expect(mockedPicker.launchCameraAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveCamera(canceledResult);
+    });
+    await firstPress;
   });
 
   it('comprime la foto y la sube con la forma correcta', async () => {
     mockedPicker.requestCameraPermissionsAsync.mockResolvedValue(grantedPermission);
     mockedPicker.launchCameraAsync.mockResolvedValue(capturedPhoto);
-    mockedManipulator.manipulateAsync.mockResolvedValue(compressedPhoto);
 
     await render(<App />);
     await fillNameAndPress();
 
     await waitFor(() => expect(mockedUploadGarment).toHaveBeenCalled());
 
-    expect(mockedManipulator.manipulateAsync).toHaveBeenCalledWith(
-      'file:///tmp/original.jpg',
-      [{ resize: { width: 1200 } }],
-      { compress: 0.8, format: 'jpeg' }
-    );
+    expect(mockManipulate).toHaveBeenCalledWith('file:///tmp/original.jpg');
+    expect(mockResize).toHaveBeenCalledWith({ width: 1200 });
+    expect(mockRenderAsync).toHaveBeenCalled();
+    expect(mockSaveAsync).toHaveBeenCalledWith({ compress: 0.8, format: 'jpeg' });
     expect(mockedUploadGarment).toHaveBeenCalledWith(
       'Playera',
       'Torso',
@@ -151,7 +224,6 @@ describe('flujo de tomar foto y agregar', () => {
   it('muestra el mensaje del backend si la subida falla', async () => {
     mockedPicker.requestCameraPermissionsAsync.mockResolvedValue(grantedPermission);
     mockedPicker.launchCameraAsync.mockResolvedValue(capturedPhoto);
-    mockedManipulator.manipulateAsync.mockResolvedValue(compressedPhoto);
     mockedUploadGarment.mockRejectedValue(
       new Error('La foto debe pesar entre 1 byte y 5 MB.')
     );
@@ -165,5 +237,37 @@ describe('flujo de tomar foto y agregar', () => {
         'La foto debe pesar entre 1 byte y 5 MB.'
       )
     );
+  });
+
+  it('si falla la recarga tras guardar, muestra un solo mensaje', async () => {
+    mockedPicker.requestCameraPermissionsAsync.mockResolvedValue(grantedPermission);
+    mockedPicker.launchCameraAsync.mockResolvedValue(capturedPhoto);
+    mockedGetGarments
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('falló la red'));
+
+    await render(<App />);
+    await fillNameAndPress();
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Listo',
+        'La prenda se guardó, pero no se pudo refrescar la lista.'
+      )
+    );
+
+    expect(alertSpy).not.toHaveBeenCalledWith(
+      'No se pudieron cargar las prendas',
+      expect.anything()
+    );
+    expect(alertSpy).not.toHaveBeenCalledWith('Listo', 'La prenda se guardó.');
+  });
+
+  it('expone las tarjetas con etiqueta accesible', async () => {
+    mockedGetGarments.mockResolvedValue([torsoGarment]);
+
+    await render(<App />);
+
+    expect(await screen.findByLabelText('Torso: prenda Playera')).toBeTruthy();
   });
 });

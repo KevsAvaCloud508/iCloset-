@@ -1,4 +1,9 @@
-import { buildOutfitSlots, countOutfitSlots, type OutfitPart } from '../outfit';
+import {
+  buildOutfitSlots,
+  countOutfitSlots,
+  reconcileSelectedIds,
+  type OutfitPart,
+} from '../outfit';
 import type { BodyPart, Garment } from '../../services/api';
 
 const BODY_PARTS: OutfitPart[] = [
@@ -54,5 +59,57 @@ describe('countOutfitSlots', () => {
 
   it('devuelve 0 con el outfit vacío', () => {
     expect(countOutfitSlots(buildOutfitSlots([], EMPTY, BODY_PARTS))).toBe(0);
+  });
+});
+
+describe('reconcileSelectedIds', () => {
+  it('respeta las zonas que el usuario quitó con el ✕', () => {
+    const garments = [makeGarment(1, 'Torso')];
+    const cleared = new Set<BodyPart>(['Torso']);
+
+    const result = reconcileSelectedIds(garments, EMPTY, cleared, BODY_PARTS);
+
+    expect(result.Torso).toBeNull();
+  });
+
+  it('auto-selecciona la primera prenda si no había selección', () => {
+    const garments = [makeGarment(5, 'Head'), makeGarment(6, 'Head')];
+
+    const result = reconcileSelectedIds(garments, EMPTY, new Set(), BODY_PARTS);
+
+    expect(result.Head).toBe(5);
+    expect(result.Torso).toBeNull();
+  });
+
+  it('mantiene la selección actual si la prenda sigue existiendo', () => {
+    const garments = [makeGarment(5, 'Head'), makeGarment(6, 'Head')];
+
+    const result = reconcileSelectedIds(
+      garments,
+      { ...EMPTY, Head: 6 },
+      new Set(),
+      BODY_PARTS
+    );
+
+    expect(result.Head).toBe(6);
+  });
+
+  it('reemplaza la selección si la prenda fue borrada', () => {
+    const garments = [makeGarment(7, 'Legs')];
+
+    const result = reconcileSelectedIds(
+      garments,
+      { ...EMPTY, Legs: 99 },
+      new Set(),
+      BODY_PARTS
+    );
+
+    expect(result.Legs).toBe(7);
+  });
+
+  it('deja vacío si la zona no tiene prendas', () => {
+    const result = reconcileSelectedIds([], EMPTY, new Set(), BODY_PARTS);
+
+    expect(result).toEqual(EMPTY);
   });
 });

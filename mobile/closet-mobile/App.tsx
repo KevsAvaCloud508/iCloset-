@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
@@ -27,7 +27,7 @@ import {
   type Garment,
 } from './src/services/api';
 import OutfitBar from './src/components/OutfitBar';
-import { buildOutfitSlots, countOutfitSlots } from './src/utils/outfit';
+import { buildOutfitSlots, countOutfitSlots, reconcileSelectedIds } from './src/utils/outfit';
 
 import { useFonts, SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-fonts/space-mono';
 
@@ -97,6 +97,14 @@ function ClosetApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Guard síncrono contra doble toque en "Tomar foto": el estado `saving`
+  // recién se refleja en el siguiente render, así que dos toques seguidos
+  // podrían abrir la cámara dos veces sin este ref.
+  const savingRef = useRef(false);
+  // Zonas que el usuario quitó con el ✕ de la barra. Mientras estén aquí,
+  // loadGarments no las vuelve a auto-seleccionar.
+  const clearedPartsRef = useRef<Set<BodyPart>>(new Set());
+
   /*
     FUENTE: Space Mono (monoespaciada, estilo moderno que casa
     con el tema blanco/negro). Se carga en runtime con expo-font
@@ -118,7 +126,7 @@ function ClosetApp() {
        estaba seleccionada ya no existe (ej. fue borrada),
        selecciona la primera disponible o deja vacío.
   */
-  const loadGarments = useCallback(async () => {
+  const loadGarments = useCallback(async (options: { silent?: boolean } = {}) => {
     try {
       const data = await getGarments(API_URL);
 
@@ -131,26 +139,20 @@ function ClosetApp() {
       });
 
       setGarments(normalized);
-
-      setSelectedIds((previous) => {
-        const next = { ...previous };
-
-        for (const part of BODY_PARTS) {
-          const items = normalized.filter((garment) => garment.bodyPart === part.value);
-          const currentStillExists = items.some((garment) => garment.id === previous[part.value]);
-
-          if (!currentStillExists) {
-            next[part.value] = items[0]?.id ?? null;
-          }
-        }
-
-        return next;
-      });
-    } catch (error) {
-      Alert.alert(
-        'No se pudieron cargar las prendas',
-        error instanceof Error ? error.message : 'Revisa la conexión con la API.'
+      setSelectedIds((previous) =>
+        reconcileSelectedIds(normalized, previous, clearedPartsRef.current, BODY_PARTS)
       );
+
+      return true;
+    } catch (error) {
+      if (!options.silent) {
+        Alert.alert(
+          'No se pudieron cargar las prendas',
+          error instanceof Error ? error.message : 'Revisa la conexión con la API.'
+        );
+      }
+
+      return false;
     } finally {
       setLoading(false);
     }
@@ -162,54 +164,56 @@ function ClosetApp() {
 
   /*
     FLUJO "TOMAR FOTO Y AGREGAR" (POST /api/garments)
-    1. Valida que haya nombre para la prenda.
-    2. Pide permiso de cámara y abre la cámara (recorte 4:5).
+    1. Evita doble toque con savingRef (el estado `saving` es asíncrono).
+    2. Valida el nombre, pide permiso y abre la cámara (recorte 4:5).
     3. ImageManipulator achica la foto a 1200px y la comprime a
-      JPEG 80%: pesa menos y la subida es más rápida.
+       JPEG 80%: pesa menos y la subida es más rápida.
     4. uploadGarment la envía como multipart/form-data.
+    5. Recarga la lista en silencio y muestra un solo mensaje final.
 
-    NOTA CLAVE: esto depende del .env (EXPO_PUBLIC_USE_RN_FETCH=1).
-    Sin esa variable, Expo usa su fetch propio que NO soporta
-    archivos locales en FormData y falla con
-    "Unsupported FormDataPart implementation". Ver api.ts.
+    NOTA CLAVE: la subida depende de EXPO_PUBLIC_USE_RN_FETCH=1
+    (los scripts de npm ya la activan). Sin esa variable, Expo usa su
+    fetch propio, que no soporta archivos locales en FormData y falla
+    con "Unsupported FormDataPart implementation". Ver api.ts.
   */
   async function takePhotoAndUpload() {
-    const trimmedName = name.trim();
-
-    if (!trimmedName) {
-      Alert.alert('Falta el nombre', 'Escribe un nombre para la prenda.');
-      return;
-    }
-
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert('Permiso necesario', 'Permite el acceso a la cámara.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.8,
-    });
-
-    if (result.canceled) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
 
     try {
       setSaving(true);
 
-      const asset = result.assets[0];
+      const trimmedName = name.trim();
 
-      const jpeg = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 1200 } }],
-        {
-          compress: 0.8,
-          format: ImageManipulator.SaveFormat.JPEG,
-        }
-      );
+      if (!trimmedName) {
+        Alert.alert('Falta el nombre', 'Escribe un nombre para la prenda.');
+        return;
+      }
+
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert('Permiso necesario', 'Permite el acceso a la cámara.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 5],
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      const context = ImageManipulator.manipulate(asset.uri);
+      context.resize({ width: 1200 });
+      const rendered = await context.renderAsync();
+      const jpeg = await rendered.saveAsync({
+        compress: 0.8,
+        format: SaveFormat.JPEG,
+      });
 
       await uploadGarment(trimmedName, selectedPart, API_URL, {
         uri: jpeg.uri,
@@ -218,14 +222,21 @@ function ClosetApp() {
       });
 
       setName('');
-      await loadGarments();
-      Alert.alert('Listo', 'La prenda se guardó.');
+
+      const refreshed = await loadGarments({ silent: true });
+      Alert.alert(
+        'Listo',
+        refreshed
+          ? 'La prenda se guardó.'
+          : 'La prenda se guardó, pero no se pudo refrescar la lista.'
+      );
     } catch (error) {
       Alert.alert(
         'No se pudo guardar',
         error instanceof Error ? error.message : 'Revisa la conexión con la API.'
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -308,6 +319,8 @@ function ClosetApp() {
               const centeredItem = items[index];
 
               if (centeredItem) {
+                // Al elegir manualmente, la zona deja de estar "descartada".
+                clearedPartsRef.current.delete(part.value);
                 setSelectedIds((previous) => ({
                   ...previous,
                   [part.value]: centeredItem.id,
@@ -321,12 +334,16 @@ function ClosetApp() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   testID={`garment-card-${item.id}`}
-                  onPress={() =>
+                  accessibilityRole="button"
+                  accessibilityLabel={`${part.label}: prenda ${item.name ?? item.id}`}
+                  accessibilityState={{ selected }}
+                  onPress={() => {
+                    clearedPartsRef.current.delete(part.value);
                     setSelectedIds((previous) => ({
                       ...previous,
                       [part.value]: item.id,
-                    }))
-                  }
+                    }));
+                  }}
                   onLongPress={() => confirmDelete(item)}
                   style={[
                     styles.garmentCard,
@@ -372,10 +389,18 @@ function ClosetApp() {
 
   /* El ✕ de la barra quita la selección de esa zona. */
   function removeFromOutfit(part: BodyPart) {
+    // Marca la zona como descartada para que una recarga no la rellene.
+    clearedPartsRef.current.add(part);
     setSelectedIds((previous) => ({
       ...previous,
       [part]: null,
     }));
+  }
+
+  // Hasta que Space Mono esté lista no renderizamos la UI, así nunca se
+  // usan los fontFamily 'SpaceMono-*' sin cargar.
+  if (!fontsLoaded) {
+    return <View style={styles.container} />;
   }
 
   return (
@@ -537,13 +562,14 @@ const styles = StyleSheet.create({
   garmentCard: {
     backgroundColor: colors.card,
     borderColor: colors.line,
-    borderWidth: 1,
+    // Grosor constante en todas las tarjetas: la seleccionada solo cambia
+    // de color, así el contenido no se encoge al seleccionar (jitter).
+    borderWidth: 3,
     borderRadius: 16,
     padding: 10,
   },
   selectedCard: {
     borderColor: colors.rail,
-    borderWidth: 3,
   },
   checkBadge: {
     position: 'absolute',
