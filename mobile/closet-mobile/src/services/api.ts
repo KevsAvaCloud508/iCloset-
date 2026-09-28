@@ -8,12 +8,10 @@
   "Unsupported FormDataPart implementation" /
   "Cannot read property 'prototype' of undefined".
 
-  Solución: el .env de este proyecto define
-      EXPO_PUBLIC_USE_RN_FETCH=1
-  Con eso Expo deja instalado su fetch y usa el NATIVO de React
-  Native, que sí construye bien las partes { uri, name, type }.
-  Si el .env desaparece o se corre "expo start" sin --clear,
-  la subida de fotos vuelve a fallar.
+  Solución: la variable EXPO_PUBLIC_USE_RN_FETCH=1. Los scripts de
+  npm (start/android/ios) ya la activan con cross-env, así que basta
+  "npm start". Si arrancas con "npx expo start" directo, copia
+  .env.example a .env y usa --clear.
 */
 
 export type BodyPart = 'Head' | 'Torso' | 'Legs' | 'Feet';
@@ -26,6 +24,44 @@ export type Garment = {
     createdAtUtc: string;
     imageUrl: string | null;
 };
+
+/*
+  URL del backend. Por defecto la IP local histórica del equipo, pero
+  se puede sobreescribir con EXPO_PUBLIC_API_URL (por ejemplo en .env):
+      EXPO_PUBLIC_API_URL=http://10.0.0.5:5005
+  Así no hay que editar el código cada vez que cambia la IP de la PC.
+*/
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.98:5005';
+
+/*
+  Tiempo máximo por petición. Si el backend no responde (IP equivocada,
+  apagado o en otra red) abortamos rápido con un mensaje claro, en vez
+  de esperar el timeout TCP del sistema (30-75 s) con la app "colgada".
+  30 s da margen a subidas lentas (Wi-Fi + Azure).
+*/
+const REQUEST_TIMEOUT_MS = 30000;
+
+/*
+  fetch con timeout usando AbortController. Si se cumple el límite,
+  devolvemos un Error entendible para el usuario.
+*/
+async function fetchWithTimeout(input: string, init: RequestInit = {}): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+        return await fetch(input, { ...init, signal: controller.signal });
+    } catch (error) {
+        if (controller.signal.aborted) {
+            throw new Error(
+                `La conexión tardó más de ${REQUEST_TIMEOUT_MS / 1000} s. Revisa que el backend esté corriendo y que la IP (EXPO_PUBLIC_API_URL) sea correcta.`
+            );
+        }
+        throw error;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 /*
   Todas las funciones aceptan la URL del backend como parámetro
@@ -41,12 +77,29 @@ export function withApiUrl(url: string) {
   };
 }
 
+/*
+  Construye el error leyendo el mensaje que devuelve el backend
+  (texto plano, por ejemplo "La foto debe pesar entre 1 byte y 5 MB").
+  Si no se puede leer, usa el mensaje con el status HTTP.
+*/
+async function buildError(response: Response, fallback: string): Promise<Error> {
+    let detail = '';
+
+    try {
+        detail = (await response.text()).trim();
+    } catch {
+        detail = '';
+    }
+
+    return new Error(detail || `${fallback}: ${response.status}`);
+}
+
 /* GET /api/garments — devuelve todas las prendas con su URL de foto en Azure. */
-export async function getGarments(url: string = 'http://192.168.0.98:5005'): Promise<Garment[]> {
-    const response = await fetch(`${url}/api/garments`);
+export async function getGarments(url: string = API_URL): Promise<Garment[]> {
+    const response = await fetchWithTimeout(`${url}/api/garments`);
 
     if (!response.ok) {
-        throw new Error(`Error al cargar prendas: ${response.status}`);
+        throw await buildError(response, 'Error al cargar prendas');
     }
 
     return response.json();
@@ -86,7 +139,7 @@ function buildPhotoAsset(
 export async function uploadGarment(
     name: string,
     bodyPart: BodyPart,
-    url: string = 'http://192.168.0.98:5005',
+    url: string = API_URL,
     asset: { uri: string; fileName?: string | null; mimeType?: string | null }
 ): Promise<void> {
     const photo = buildPhotoAsset(asset);
@@ -95,23 +148,23 @@ export async function uploadGarment(
     form.append('bodyPart', bodyPart);
     form.append('photo', photo as unknown as string);
 
-    const response = await fetch(`${url}/api/garments`, {
+    const response = await fetchWithTimeout(`${url}/api/garments`, {
         method: 'POST',
         body: form,
     });
 
     if (!response.ok) {
-        throw new Error(`Error al subir prenda: ${response.status}`);
+        throw await buildError(response, 'Error al subir prenda');
     }
 }
 
 /* DELETE /api/garments/{id} — borra el registro y su foto en Azure. */
-export async function deleteGarment(id: number, url: string = 'http://192.168.0.98:5005'): Promise<void> {
-    const response = await fetch(`${url}/api/garments/${id}`, {
+export async function deleteGarment(id: number, url: string = API_URL): Promise<void> {
+    const response = await fetchWithTimeout(`${url}/api/garments/${id}`, {
         method: 'DELETE',
     } as RequestInit);
 
     if (!response.ok) {
-        throw new Error(`Error al borrar prenda: ${response.status}`);
+        throw await buildError(response, 'Error al borrar prenda');
     }
 }

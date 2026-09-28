@@ -36,6 +36,10 @@ yarn-error.*
 !.env.example
 .env*.local
 
+# documentos locales de investigación (no se suben)
+ESTADO-ACTUAL.md
+PLAN-P4.md
+
 # .NET
 
 **/bin/
