@@ -79,7 +79,11 @@ function ClosetApp() {
   // para el efecto "snap" del carrusel y para saber qué
   // tarjeta quedó centrada al terminar el scroll.
   const cardWidth = Math.min(170, width * 0.42);
-  const cardStep = cardWidth + 12;
+  // Separación real entre tarjetas: debe coincidir con el separador
+  // del FlatList para que el snap y el cálculo de la tarjeta centrada
+  // no se desfasen (antes 12 vs. 14).
+  const cardGap = 14;
+  const cardStep = cardWidth + cardGap;
   const imageHeight = Math.round(cardWidth * 0.95);
 
   const [garments, setGarments] = useState<Garment[]>([]);
@@ -263,6 +267,11 @@ function ClosetApp() {
   */
   function renderCarousel(part: { value: BodyPart; label: string }) {
     const items = garments.filter((garment) => garment.bodyPart === part.value);
+    // Índice de la prenda seleccionada para abrir el carrusel ya centrado.
+    const selectedIndex = Math.max(
+      items.findIndex((garment) => garment.id === selectedIds[part.value]),
+      0
+    );
 
     return (
       <View key={part.value} style={styles.section}>
@@ -280,10 +289,16 @@ function ClosetApp() {
             showsHorizontalScrollIndicator={false}
             snapToInterval={cardStep}
             decelerationRate="fast"
+            initialScrollIndex={selectedIndex}
+            getItemLayout={(_, index) => ({
+              length: cardStep,
+              offset: cardStep * index,
+              index,
+            })}
             contentContainerStyle={{
               paddingHorizontal: Math.max((width - cardWidth) / 2, 16),
             }}
-            ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
+            ItemSeparatorComponent={() => <View style={{ width: cardGap }} />}
             onMomentumScrollEnd={(event) => {
               const index = Math.round(event.nativeEvent.contentOffset.x / cardStep);
               const centeredItem = items[index];
