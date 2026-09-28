@@ -41,12 +41,29 @@ export function withApiUrl(url: string) {
   };
 }
 
+/*
+  Construye el error leyendo el mensaje que devuelve el backend
+  (texto plano, por ejemplo "La foto debe pesar entre 1 byte y 5 MB").
+  Si no se puede leer, usa el mensaje con el status HTTP.
+*/
+async function buildError(response: Response, fallback: string): Promise<Error> {
+    let detail = '';
+
+    try {
+        detail = (await response.text()).trim();
+    } catch {
+        detail = '';
+    }
+
+    return new Error(detail || `${fallback}: ${response.status}`);
+}
+
 /* GET /api/garments — devuelve todas las prendas con su URL de foto en Azure. */
 export async function getGarments(url: string = 'http://192.168.0.98:5005'): Promise<Garment[]> {
     const response = await fetch(`${url}/api/garments`);
 
     if (!response.ok) {
-        throw new Error(`Error al cargar prendas: ${response.status}`);
+        throw await buildError(response, 'Error al cargar prendas');
     }
 
     return response.json();
@@ -101,7 +118,7 @@ export async function uploadGarment(
     });
 
     if (!response.ok) {
-        throw new Error(`Error al subir prenda: ${response.status}`);
+        throw await buildError(response, 'Error al subir prenda');
     }
 }
 
@@ -112,6 +129,6 @@ export async function deleteGarment(id: number, url: string = 'http://192.168.0.
     } as RequestInit);
 
     if (!response.ok) {
-        throw new Error(`Error al borrar prenda: ${response.status}`);
+        throw await buildError(response, 'Error al borrar prenda');
     }
 }
